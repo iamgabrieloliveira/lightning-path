@@ -136,6 +136,18 @@ impl<T> NFA<T> {
     fn metadata(&mut self, index: usize, metadata: T) {
         self.get_mut(index).metadata = Some(metadata);
     }
+
+    fn start_capture(&mut self, index: usize) {
+        todo!();
+    }
+
+    fn end_capture(&mut self, index: usize) {
+        todo!();
+    }
+
+    fn put_state(&mut self, index: usize, state: usize) {
+        todo!();
+    }
 }
 
 impl<T> State<T> {
@@ -234,7 +246,15 @@ impl<T: std::fmt::Debug> Router<T> {
 
             match first_byte(segment) {
                 b':' => todo!(),
-                b'*' => todo!(),
+                b'*' => {
+                    todo!();
+                    state = process_star_state(nfa, state);
+                    metadata.wildcards += 1;
+                    metadata.param_names.push(
+                        // Add the param key without '*'
+                        segment[1..].to_string(),
+                    );
+                }
                 _ => {
                     state = process_static_segment(segment, nfa, state);
                     metadata.statics += 1;
@@ -251,14 +271,15 @@ impl<T: std::fmt::Debug> Router<T> {
         // Add the handler to the handlers map
         self.handlers.insert(state, destiny);
     }
+}
 
-    fn process_static_segment(&mut self, segment: &str, mut state: usize) -> usize {
-        for char in segment.chars() {
-            state = self.nfa.put(state, CharacterClass::valid_char(char));
-        }
+fn process_star_state<T>(nfa: &mut NFA<T>, mut state: usize) -> usize {
+    state = nfa.put(state, CharacterClass::any());
+    nfa.put_state(state, state);
+    nfa.start_capture(state);
+    nfa.end_capture(state);
 
-        state
-    }
+    state
 }
 
 fn process_static_segment<T>(segment: &str, nfa: &mut NFA<T>, mut state: usize) -> usize {
@@ -267,6 +288,45 @@ fn process_static_segment<T>(segment: &str, nfa: &mut NFA<T>, mut state: usize) 
     }
 
     state
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_segments() {
+        let route = "/users/:id";
+        let expected = vec![(Some('/'), "users"), (Some('/'), ":id")];
+        assert_eq!(segments(route), expected);
+
+        let route = "/users/:id/posts";
+        let expected = vec![
+            (Some('/'), "users"),
+            (Some('/'), ":id"),
+            (Some('/'), "posts"),
+        ];
+        assert_eq!(segments(route), expected);
+
+        let route = "/users/:id/posts/:post_id";
+        let expected = vec![
+            (Some('/'), "users"),
+            (Some('/'), ":id"),
+            (Some('/'), "posts"),
+            (Some('/'), ":post_id"),
+        ];
+        assert_eq!(segments(route), expected);
+
+        let route = "/users/:id/posts/:post_id/comments";
+        let expected = vec![
+            (Some('/'), "users"),
+            (Some('/'), ":id"),
+            (Some('/'), "posts"),
+            (Some('/'), ":post_id"),
+            (Some('/'), "comments"),
+        ];
+        assert_eq!(segments(route), expected);
+    }
 }
 
 fn main() {}
