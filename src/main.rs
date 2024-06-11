@@ -138,15 +138,19 @@ impl<T> NFA<T> {
     }
 
     fn start_capture(&mut self, index: usize) {
-        todo!();
+        self.get_mut(index).start_capture = true;
+        self.start_capture[index] = true;
     }
 
     fn end_capture(&mut self, index: usize) {
-        todo!();
+        self.get_mut(index).end_capture = true;
+        self.end_capture[index] = true;
     }
 
-    fn put_state(&mut self, index: usize, state: usize) {
-        todo!();
+    fn put_state(&mut self, index: usize, child: usize) {
+        if !self.get(index).next_states.contains(&child) {
+            self.get_mut(index).next_states.push(child);
+        }
     }
 }
 
@@ -247,7 +251,6 @@ impl<T: std::fmt::Debug> Router<T> {
             match first_byte(segment) {
                 b':' => todo!(),
                 b'*' => {
-                    todo!();
                     state = process_star_state(nfa, state);
                     metadata.wildcards += 1;
                     metadata.param_names.push(
@@ -283,6 +286,9 @@ fn process_star_state<T>(nfa: &mut NFA<T>, mut state: usize) -> usize {
 }
 
 fn process_static_segment<T>(segment: &str, nfa: &mut NFA<T>, mut state: usize) -> usize {
+    // When we are processing a static segment
+    // we just need to add a transition for each character
+    // to our current state
     for char in segment.chars() {
         state = nfa.put(state, CharacterClass::valid_char(char));
     }
@@ -326,6 +332,28 @@ mod tests {
             (Some('/'), "comments"),
         ];
         assert_eq!(segments(route), expected);
+    }
+
+    #[test]
+    fn test_add_static_routes() {
+        let mut router = Router::new();
+
+        router.add("/users", "users");
+
+        let nfa = &router.nfa;
+        let handlers = &router.handlers;
+
+        assert_eq!(
+            nfa.states.len(),
+            6 // One state for each character in "users" + 1 for the root
+        );
+        assert_eq!(handlers.len(), 1);
+
+        let handler = handlers
+            .get(&5) // The last state of the NFA
+            .unwrap();
+
+        assert_eq!(*handler, "users");
     }
 }
 
