@@ -249,7 +249,14 @@ impl<T: std::fmt::Debug> Router<T> {
             }
 
             match first_byte(segment) {
-                b':' => todo!(),
+                b':' => {
+                    state = process_star_state(nfa, state);
+                    metadata.dynamics += 1;
+                    metadata.param_names.push(
+                        // Add the param key without ':'
+                        segment[1..].to_string(),
+                    );
+                }
                 b'*' => {
                     state = process_star_state(nfa, state);
                     metadata.wildcards += 1;
@@ -277,7 +284,7 @@ impl<T: std::fmt::Debug> Router<T> {
 }
 
 fn process_star_state<T>(nfa: &mut NFA<T>, mut state: usize) -> usize {
-    state = nfa.put(state, CharacterClass::any());
+    state = nfa.put(state, CharacterClass::valid_char('/'));
     nfa.put_state(state, state);
     nfa.start_capture(state);
     nfa.end_capture(state);
@@ -357,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn test_add_routes_with_wildcards() {
+    fn test_add_routes_with_star_wildcards() {
         let mut router = Router::new();
 
         router.add("users/*", "users-wildcard");
@@ -370,6 +377,25 @@ mod tests {
             nfa.states.len(),
             8 // One state for each character in "users" + 1 for the root
         );
+    }
+
+    #[test]
+    fn test_add_routes_with_colon_wildcards() {
+        let mut router = Router::new();
+
+        router.add("user/:id", "users-wildcard");
+
+        let mut nfa = router.nfa;
+        let handlers = router.handlers;
+
+        assert_eq!(handlers.len(), 1);
+        assert_eq!(nfa.states.len(), 7);
+
+        let metadata = &nfa.states[6]; // Last state
+        let metadata = metadata.metadata.as_ref().unwrap();
+        let params = &metadata.param_names;
+
+        assert_eq!(*params, vec!["id"]);
     }
 }
 
