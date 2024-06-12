@@ -302,8 +302,8 @@ mod tests {
 
     #[test]
     fn test_segments() {
-        let route = "/users/:id";
-        let expected = vec![(Some('/'), "users"), (Some('/'), ":id")];
+        let route = "users/:id";
+        let expected = vec![(None, "users"), (Some('/'), ":id")];
         assert_eq!(segments(route), expected);
 
         let route = "/users/:id/posts";
@@ -338,7 +338,7 @@ mod tests {
     fn test_add_static_routes() {
         let mut router = Router::new();
 
-        router.add("/users", "users");
+        router.add("users", "users");
 
         let nfa = &router.nfa;
         let handlers = &router.handlers;
@@ -354,6 +354,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(*handler, "users");
+    }
+
+    #[test]
+    fn test_add_routes_with_wildcards() {
+        let mut router = Router::new();
+
+        router.add("users/*", "users-wildcard");
+
+        let nfa = router.nfa;
+        let handlers = router.handlers;
+
+        assert_eq!(handlers.len(), 1);
+        assert_eq!(
+            nfa.states.len(),
+            8 // One state for each character in "users" + 1 for the root
+        );
     }
 }
 
