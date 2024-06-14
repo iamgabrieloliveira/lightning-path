@@ -1,12 +1,61 @@
 use std::collections::{BTreeMap, HashSet};
 
-use crate::CharacterClass::{Ascii, ValidChars};
+use crate::CharacterClass::{Ascii, InvalidChars, ValidChars};
 
 #[derive(PartialEq, Eq, Clone, Default, Debug)]
 struct CharSet {
     low_mask: u32,
     high_mask: u64,
     non_ascii: HashSet<char>,
+}
+
+impl CharSet {
+    pub fn contains(&self, char: char) -> bool {
+        let val = char as u32 - 1;
+
+        if val > 127 {
+            self.non_ascii.contains(&char)
+        } else if val > 63 {
+            let bit = 1 << (val - 64);
+            self.high_mask & bit != 0
+        } else {
+            let bit = 1 << val;
+            self.low_mask & bit != 0
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Thread {
+    state: usize,
+    captures: Vec<(usize, usize)>,
+    capture_begin: Option<usize>,
+}
+
+impl Thread {
+    fn new() -> Self {
+        Self {
+            state: 0,
+            captures: Vec::new(),
+            capture_begin: None,
+        }
+    }
+
+    fn start_capture(&mut self, start: usize) {
+        self.capture_begin = Some(start);
+    }
+
+    fn end_capture(&mut self, end: usize) {
+        self.captures.push((self.capture_begin.unwrap(), end));
+        self.capture_begin = None;
+    }
+
+    fn extract<'a>(&self, source: &'a str) -> Vec<&'a str> {
+        self.captures
+            .iter()
+            .map(|&(start, end)| &source[start..end])
+            .collect()
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -37,6 +86,23 @@ impl CharacterClass {
         let mut set = CharSet::default();
         set.non_ascii.insert(char);
         set
+    }
+
+    fn matches(&self, char: char) -> bool {
+        match *self {
+            ValidChars(ref valid) => valid.contains(char),
+            InvalidChars(ref valid) => !valid.contains(char),
+            Ascii(high, low, unicode) => {
+                let val = char as u32 - 1;
+                if val > 127 {
+                    unicode
+                } else if val > 63 {
+                    high & (1 << (val - 64)) != 0
+                } else {
+                    low & (1 << val) != 0
+                }
+            }
+        }
     }
 }
 
@@ -168,6 +234,28 @@ impl<T> State<T> {
     }
 }
 
+struct Match<'a> {
+    state: usize,
+    captures: Vec<&'a str>,
+}
+
+impl<'a> Match<'a> {
+    fn new(state: usize, captures: Vec<&'a str>) -> Self {
+        Self { state, captures }
+    }
+}
+
+#[derive(Debug)]
+struct RouterMatch<T> {
+    handler: T,
+}
+
+impl<T> RouterMatch<T> {
+    fn new(handler: T) -> Self {
+        Self { handler }
+    }
+}
+
 impl<T> NFA<T> {
     fn new() -> NFA<T> {
         let root = State::new(0, CharacterClass::any());
@@ -178,6 +266,102 @@ impl<T> NFA<T> {
             end_capture: vec![false],
             acceptance: vec![false],
         }
+    }
+
+    fn process<'a>(&self, string: &'a str) -> Result<Match<'a>, String> {
+        let mut threads = vec![Thread::new()];
+
+        for (i, char) in string.char_indices() {
+            let next_threads = self.process_char(threads, char, i);
+
+            if next_threads.is_empty() {
+                return Err(format!("No match found for {}", string));
+            }
+
+            threads = next_threads;
+        }
+
+        let mut returned = threads
+            .into_iter()
+            .filter(|thread| self.get(thread.state).acceptance);
+
+        let thread = returned.next();
+
+        match thread {
+            None => Err(format!("No match found for {}", string)),
+            Some(mut thread) => {
+                if thread.capture_begin.is_some() {
+                    thread.end_capture(string.len());
+                }
+
+                let state = self.get(thread.state);
+                Ok(Match::new(state.index, thread.extract(string)))
+            }
+        }
+    }
+
+    fn process_char(&self, threads: Vec<Thread>, char: char, pos: usize) -> Vec<Thread> {
+        let mut returned = Vec::with_capacity(threads.len());
+
+        for mut thread in threads {
+            let current_state = self.get(thread.state);
+
+            let mut count = 0;
+            let mut found_state = 0;
+
+            for &index in &current_state.next_states {
+                let state = &self.get(index);
+
+                if state.chars.matches(char) {
+                    count += 1;
+                    found_state = index;
+                }
+            }
+
+            if count == 1 {
+                thread.state = found_state;
+                capture(self, &mut thread, current_state.index, found_state, pos);
+                returned.push(thread);
+                continue;
+            }
+
+            for &index in &current_state.next_states {
+                let state = &self.get(index);
+
+                if state.chars.matches(char) {
+                    let mut thread = fork_thread(&thread, state);
+                    capture(self, &mut thread, current_state.index, index, pos);
+                    returned.push(thread);
+                }
+            }
+        }
+
+        returned
+    }
+}
+
+fn fork_thread<T>(thread: &Thread, state: &State<T>) -> Thread {
+    let mut new_thread = thread.clone();
+    new_thread.state = state.index;
+    new_thread
+}
+
+fn capture<T>(
+    nfa: &NFA<T>,
+    thread: &mut Thread,
+    current_state: usize,
+    next_state: usize,
+    pos: usize,
+) {
+    if thread.capture_begin.is_none() && nfa.start_capture[next_state] {
+        thread.start_capture(pos);
+    }
+
+    if thread.capture_begin.is_some()
+        && nfa.end_capture[current_state]
+        && next_state > current_state
+    {
+        thread.end_capture(pos);
     }
 }
 
@@ -220,6 +404,24 @@ impl<T: std::fmt::Debug> Router<T> {
         Router {
             nfa: NFA::new(),
             handlers: BTreeMap::new(),
+        }
+    }
+
+    fn recognize(&self, mut path: &str) -> Result<RouterMatch<&T>, String> {
+        if first_byte(path) == b'/' {
+            path = &path[1..];
+        }
+
+        let nfa = &self.nfa;
+        let result = nfa.process(path);
+
+        match result {
+            Err(str) => Err(str),
+            Ok(m) => {
+                let handler = self.handlers.get(&m.state).unwrap();
+
+                Ok(RouterMatch::new(handler))
+            }
         }
     }
 
@@ -367,7 +569,7 @@ mod tests {
     fn test_add_routes_with_star_wildcards() {
         let mut router = Router::new();
 
-        router.add("users/*", "users-wildcard");
+        router.add("users/*-profile", "users-wildcard");
 
         let nfa = router.nfa;
         let handlers = router.handlers;
@@ -396,6 +598,17 @@ mod tests {
         let params = &metadata.param_names;
 
         assert_eq!(*params, vec!["id"]);
+    }
+
+    #[test]
+    fn test_route_recognize_static_route_1() {
+        let mut router = Router::new();
+
+        router.add("/users", "users");
+
+        let m = router.recognize("/users").unwrap();
+
+        assert_eq!(*m.handler, "users");
     }
 }
 
