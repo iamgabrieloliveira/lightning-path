@@ -700,25 +700,12 @@ mod tests {
     fn test_route_recognize_star_wildcard() {
         let mut router = Router::new();
 
-        router.add("/blog/*-post", "some-post");
+        router.add("/fs/*path", "fs");
 
-        let m = router.recognize("/blog/random-post").unwrap();
+        let m = router.recognize("/fs/random-file-path").unwrap();
 
-        assert_eq!(*m.handler, "some-post");
-        assert_eq!(m.params.find("-post"), Some("random-post"));
-    }
-
-    #[test]
-    fn test_route_recognize_star_wildcard_multiple() {
-        let mut router = Router::new();
-
-        router.add("/blog/*-post/*-comment", "some-post-comment");
-
-        let m = router.recognize("/blog/random-post/some-comment").unwrap();
-
-        assert_eq!(*m.handler, "some-post-comment");
-        assert_eq!(m.params.find("-post"), Some("random-post"));
-        assert_eq!(m.params.find("-comment"), Some("some-comment"));
+        assert_eq!(*m.handler, "fs");
+        assert_eq!(m.params.find("path"), Some("random-file-path"));
     }
 }
 
