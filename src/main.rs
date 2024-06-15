@@ -25,7 +25,34 @@ impl CharSet {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
+struct Params {
+    map: BTreeMap<String, String>,
+}
+
+impl PartialEq for Params {
+    fn eq(&self, other: &Self) -> bool {
+        self.map == other.map
+    }
+}
+
+impl Params {
+    fn new() -> Params {
+        Params {
+            map: BTreeMap::new(),
+        }
+    }
+
+    fn insert(&mut self, key: String, value: String) {
+        self.map.insert(key, value);
+    }
+
+    fn find(&self, key: &str) -> Option<&str> {
+        self.map.get(key).map(|s| &s[..])
+    }
+}
+
+#[derive(Clone, Debug)]
 struct Thread {
     state: usize,
     captures: Vec<(usize, usize)>,
@@ -79,6 +106,18 @@ impl CharacterClass {
             Ascii(1 << (val - 64), 0, false)
         } else {
             Ascii(0, 1 << val, false)
+        }
+    }
+
+    fn invalid_char(char: char) -> Self {
+        let val = char as u32 - 1;
+
+        if val > 127 {
+            InvalidChars(Self::char_to_set(char))
+        } else if val > 63 {
+            Ascii(u64::MAX ^ (1 << (val - 64)), u64::MAX, true)
+        } else {
+            Ascii(u64::MAX, u64::MAX ^ (1 << val), true)
         }
     }
 
@@ -234,6 +273,7 @@ impl<T> State<T> {
     }
 }
 
+#[derive(Debug)]
 struct Match<'a> {
     state: usize,
     captures: Vec<&'a str>,
@@ -248,11 +288,12 @@ impl<'a> Match<'a> {
 #[derive(Debug)]
 struct RouterMatch<T> {
     handler: T,
+    params: Params,
 }
 
 impl<T> RouterMatch<T> {
-    fn new(handler: T) -> Self {
-        Self { handler }
+    fn new(handler: T, params: Params) -> Self {
+        Self { handler, params }
     }
 }
 
@@ -399,7 +440,7 @@ fn first_byte(s: &str) -> u8 {
     s.as_bytes()[0]
 }
 
-impl<T: std::fmt::Debug> Router<T> {
+impl<T> Router<T> {
     fn new() -> Router<T> {
         Router {
             nfa: NFA::new(),
@@ -415,14 +456,21 @@ impl<T: std::fmt::Debug> Router<T> {
         let nfa = &self.nfa;
         let result = nfa.process(path);
 
-        match result {
-            Err(str) => Err(str),
-            Ok(m) => {
-                let handler = self.handlers.get(&m.state).unwrap();
+        return result.map(|m| {
+            let mut map = Params::new();
+            let state = &nfa.get(m.state);
+            let metadata = state.metadata.as_ref().unwrap();
+            let param_names = metadata.param_names.clone();
 
-                Ok(RouterMatch::new(handler))
+            for (i, capture) in m.captures.iter().enumerate() {
+                if !param_names[i].is_empty() {
+                    map.insert(param_names[i].to_string(), capture.to_string());
+                }
             }
-        }
+
+            let handler = self.handlers.get(&m.state).unwrap();
+            RouterMatch::new(handler, map)
+        });
     }
 
     fn add(&mut self, mut route: &str, destiny: T) {
@@ -486,7 +534,7 @@ impl<T: std::fmt::Debug> Router<T> {
 }
 
 fn process_star_state<T>(nfa: &mut NFA<T>, mut state: usize) -> usize {
-    state = nfa.put(state, CharacterClass::valid_char('/'));
+    state = nfa.put(state, CharacterClass::invalid_char('/'));
     nfa.put_state(state, state);
     nfa.start_capture(state);
     nfa.end_capture(state);
@@ -587,7 +635,7 @@ mod tests {
 
         router.add("user/:id", "users-wildcard");
 
-        let mut nfa = router.nfa;
+        let nfa = router.nfa;
         let handlers = router.handlers;
 
         assert_eq!(handlers.len(), 1);
@@ -601,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn test_route_recognize_static_route_1() {
+    fn test_route_recognize_static_route() {
         let mut router = Router::new();
 
         router.add("/users", "users");
@@ -609,6 +657,68 @@ mod tests {
         let m = router.recognize("/users").unwrap();
 
         assert_eq!(*m.handler, "users");
+        assert_eq!(m.params, Params::new());
+    }
+
+    #[test]
+    fn test_route_recognize_colon_wildcard() {
+        let mut router = Router::new();
+
+        router.add("/user/:id", "user");
+
+        let m = router.recognize("/user/1").unwrap();
+
+        assert_eq!(*m.handler, "user");
+        assert_eq!(m.params.find("id"), Some("1"));
+    }
+
+    #[test]
+    fn test_route_recognize_colon_wildcard_multiple_params() {
+        let mut router = Router::new();
+
+        router.add("/user/:id/posts/:post_id", "user-post");
+
+        let m = router.recognize("/user/9/posts/10").unwrap();
+
+        assert_eq!(*m.handler, "user-post");
+        assert_eq!(m.params.find("id"), Some("9"));
+        assert_eq!(m.params.find("post_id"), Some("10"));
+    }
+
+    #[test]
+    fn test_route_recognize_colon_wildcard_fail() {
+        let mut router = Router::new();
+
+        router.add("/user/:id", "user");
+
+        let m = router.recognize("/user");
+
+        assert!(m.is_err());
+    }
+
+    #[test]
+    fn test_route_recognize_star_wildcard() {
+        let mut router = Router::new();
+
+        router.add("/blog/*-post", "some-post");
+
+        let m = router.recognize("/blog/random-post").unwrap();
+
+        assert_eq!(*m.handler, "some-post");
+        assert_eq!(m.params.find("-post"), Some("random-post"));
+    }
+
+    #[test]
+    fn test_route_recognize_star_wildcard_multiple() {
+        let mut router = Router::new();
+
+        router.add("/blog/*-post/*-comment", "some-post-comment");
+
+        let m = router.recognize("/blog/random-post/some-comment").unwrap();
+
+        assert_eq!(*m.handler, "some-post-comment");
+        assert_eq!(m.params.find("-post"), Some("random-post"));
+        assert_eq!(m.params.find("-comment"), Some("some-comment"));
     }
 }
 
