@@ -53,10 +53,10 @@ impl Params {
 }
 
 #[derive(Clone, Debug)]
-struct Thread {
-    state: usize,
-    captures: Vec<(usize, usize)>,
-    capture_begin: Option<usize>,
+pub struct Thread {
+    pub state: usize,
+    pub captures: Vec<(usize, usize)>,
+    pub capture_begin: Option<usize>,
 }
 
 impl Thread {
@@ -275,8 +275,8 @@ impl<T> State<T> {
 
 #[derive(Debug)]
 pub struct Match<'a> {
-    state: usize,
-    captures: Vec<&'a str>,
+    pub state: usize,
+    pub captures: Vec<&'a str>,
 }
 
 impl<'a> Match<'a> {
@@ -287,8 +287,8 @@ impl<'a> Match<'a> {
 
 #[derive(Debug)]
 pub struct RouterMatch<T> {
-    handler: T,
-    params: Params,
+    pub handler: T,
+    pub params: Params,
 }
 
 impl<T> RouterMatch<T> {
@@ -708,5 +708,3 @@ mod tests {
         assert_eq!(m.params.find("path"), Some("random-file-path"));
     }
 }
-
-fn main() {}
