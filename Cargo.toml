@@ -1,6 +1,6 @@
 [package]
 name = "lightning-path"
-version = "1.0.0"
+version = "1.0.1"
 license = "MIT"
 description = "Route Recognizer library for lightning-fast matching"
 edition = "2021"
