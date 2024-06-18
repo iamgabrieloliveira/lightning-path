@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "route-recognizer-rust"
-version = "0.1.0"
+name = "lightning-path"
+version = "1.0.0"
