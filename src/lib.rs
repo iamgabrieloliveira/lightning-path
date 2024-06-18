@@ -3,10 +3,10 @@ use std::collections::{BTreeMap, HashSet};
 use crate::CharacterClass::{Ascii, InvalidChars, ValidChars};
 
 #[derive(PartialEq, Eq, Clone, Default, Debug)]
-struct CharSet {
-    low_mask: u32,
-    high_mask: u64,
-    non_ascii: HashSet<char>,
+pub struct CharSet {
+    pub low_mask: u32,
+    pub high_mask: u64,
+    pub non_ascii: HashSet<char>,
 }
 
 impl CharSet {
@@ -26,8 +26,8 @@ impl CharSet {
 }
 
 #[derive(Debug)]
-struct Params {
-    map: BTreeMap<String, String>,
+pub struct Params {
+    pub map: BTreeMap<String, String>,
 }
 
 impl PartialEq for Params {
@@ -37,17 +37,17 @@ impl PartialEq for Params {
 }
 
 impl Params {
-    fn new() -> Params {
+    pub fn new() -> Params {
         Params {
             map: BTreeMap::new(),
         }
     }
 
-    fn insert(&mut self, key: String, value: String) {
+    pub fn insert(&mut self, key: String, value: String) {
         self.map.insert(key, value);
     }
 
-    fn find(&self, key: &str) -> Option<&str> {
+    pub fn find(&self, key: &str) -> Option<&str> {
         self.map.get(key).map(|s| &s[..])
     }
 }
@@ -60,7 +60,7 @@ struct Thread {
 }
 
 impl Thread {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             state: 0,
             captures: Vec::new(),
@@ -68,16 +68,16 @@ impl Thread {
         }
     }
 
-    fn start_capture(&mut self, start: usize) {
+    pub fn start_capture(&mut self, start: usize) {
         self.capture_begin = Some(start);
     }
 
-    fn end_capture(&mut self, end: usize) {
+    pub fn end_capture(&mut self, end: usize) {
         self.captures.push((self.capture_begin.unwrap(), end));
         self.capture_begin = None;
     }
 
-    fn extract<'a>(&self, source: &'a str) -> Vec<&'a str> {
+    pub fn extract<'a>(&self, source: &'a str) -> Vec<&'a str> {
         self.captures
             .iter()
             .map(|&(start, end)| &source[start..end])
@@ -86,18 +86,18 @@ impl Thread {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-enum CharacterClass {
+pub enum CharacterClass {
     Ascii(u64, u64, bool),
     ValidChars(CharSet),
     InvalidChars(CharSet),
 }
 
 impl CharacterClass {
-    fn any() -> CharacterClass {
+    pub fn any() -> CharacterClass {
         Ascii(u64::MAX, u64::MAX, false)
     }
 
-    fn valid_char(char: char) -> Self {
+    pub fn valid_char(char: char) -> Self {
         let val = char as u32 - 1;
 
         if val > 127 {
@@ -109,7 +109,7 @@ impl CharacterClass {
         }
     }
 
-    fn invalid_char(char: char) -> Self {
+    pub fn invalid_char(char: char) -> Self {
         let val = char as u32 - 1;
 
         if val > 127 {
@@ -121,13 +121,13 @@ impl CharacterClass {
         }
     }
 
-    fn char_to_set(char: char) -> CharSet {
+    pub fn char_to_set(char: char) -> CharSet {
         let mut set = CharSet::default();
         set.non_ascii.insert(char);
         set
     }
 
-    fn matches(&self, char: char) -> bool {
+    pub fn matches(&self, char: char) -> bool {
         match *self {
             ValidChars(ref valid) => valid.contains(char),
             InvalidChars(ref valid) => !valid.contains(char),
@@ -146,15 +146,15 @@ impl CharacterClass {
 }
 
 #[derive(Debug)]
-struct Metadata {
-    statics: u32,
-    dynamics: u32,
-    wildcards: u32,
-    param_names: Vec<String>,
+pub struct Metadata {
+    pub statics: u32,
+    pub dynamics: u32,
+    pub wildcards: u32,
+    pub param_names: Vec<String>,
 }
 
 impl Metadata {
-    fn new() -> Metadata {
+    pub fn new() -> Metadata {
         Metadata {
             statics: 0,
             dynamics: 0,
@@ -165,26 +165,26 @@ impl Metadata {
 }
 
 #[derive(Debug)]
-struct State<T> {
-    index: usize,
-    chars: CharacterClass,
-    next_states: Vec<usize>,
-    acceptance: bool,
-    start_capture: bool,
-    end_capture: bool,
-    metadata: Option<T>,
+pub struct State<T> {
+    pub index: usize,
+    pub chars: CharacterClass,
+    pub next_states: Vec<usize>,
+    pub acceptance: bool,
+    pub start_capture: bool,
+    pub end_capture: bool,
+    pub metadata: Option<T>,
 }
 
 #[derive(Debug)]
-struct NFA<T> {
-    states: Vec<State<T>>,
-    start_capture: Vec<bool>,
-    end_capture: Vec<bool>,
-    acceptance: Vec<bool>,
+pub struct NFA<T> {
+    pub states: Vec<State<T>>,
+    pub start_capture: Vec<bool>,
+    pub end_capture: Vec<bool>,
+    pub acceptance: Vec<bool>,
 }
 
 impl<T> NFA<T> {
-    fn put(&mut self, index: usize, chars: CharacterClass) -> usize {
+    pub fn put(&mut self, index: usize, chars: CharacterClass) -> usize {
         {
             // Check if the state already exists
             // If it does, return just the index of it
@@ -208,11 +208,11 @@ impl<T> NFA<T> {
         state
     }
 
-    fn get_mut(&mut self, index: usize) -> &mut State<T> {
+    pub fn get_mut(&mut self, index: usize) -> &mut State<T> {
         &mut self.states[index]
     }
 
-    fn new_state(&mut self, chars: CharacterClass) -> usize {
+    pub fn new_state(&mut self, chars: CharacterClass) -> usize {
         // The index of the new state is the length of the states vector
         // Example:
         // [0: 'a', 1: 'b', 2: 'c']
@@ -228,31 +228,31 @@ impl<T> NFA<T> {
         index
     }
 
-    fn get(&self, index: usize) -> &State<T> {
+    pub fn get(&self, index: usize) -> &State<T> {
         &self.states[index]
     }
 
-    fn acceptance(&mut self, index: usize) {
+    pub fn acceptance(&mut self, index: usize) {
         // Set the acceptance of the state at the given index to true
         self.get_mut(index).acceptance = true;
         self.acceptance[index] = true;
     }
 
-    fn metadata(&mut self, index: usize, metadata: T) {
+    pub fn metadata(&mut self, index: usize, metadata: T) {
         self.get_mut(index).metadata = Some(metadata);
     }
 
-    fn start_capture(&mut self, index: usize) {
+    pub fn start_capture(&mut self, index: usize) {
         self.get_mut(index).start_capture = true;
         self.start_capture[index] = true;
     }
 
-    fn end_capture(&mut self, index: usize) {
+    pub fn end_capture(&mut self, index: usize) {
         self.get_mut(index).end_capture = true;
         self.end_capture[index] = true;
     }
 
-    fn put_state(&mut self, index: usize, child: usize) {
+    pub fn put_state(&mut self, index: usize, child: usize) {
         if !self.get(index).next_states.contains(&child) {
             self.get_mut(index).next_states.push(child);
         }
@@ -260,7 +260,7 @@ impl<T> NFA<T> {
 }
 
 impl<T> State<T> {
-    fn new(index: usize, chars: CharacterClass) -> Self {
+    pub fn new(index: usize, chars: CharacterClass) -> Self {
         Self {
             index,
             chars,
@@ -274,31 +274,31 @@ impl<T> State<T> {
 }
 
 #[derive(Debug)]
-struct Match<'a> {
+pub struct Match<'a> {
     state: usize,
     captures: Vec<&'a str>,
 }
 
 impl<'a> Match<'a> {
-    fn new(state: usize, captures: Vec<&'a str>) -> Self {
+    pub fn new(state: usize, captures: Vec<&'a str>) -> Self {
         Self { state, captures }
     }
 }
 
 #[derive(Debug)]
-struct RouterMatch<T> {
+pub struct RouterMatch<T> {
     handler: T,
     params: Params,
 }
 
 impl<T> RouterMatch<T> {
-    fn new(handler: T, params: Params) -> Self {
+    pub fn new(handler: T, params: Params) -> Self {
         Self { handler, params }
     }
 }
 
 impl<T> NFA<T> {
-    fn new() -> NFA<T> {
+    pub fn new() -> NFA<T> {
         let root = State::new(0, CharacterClass::any());
 
         NFA {
@@ -309,7 +309,7 @@ impl<T> NFA<T> {
         }
     }
 
-    fn process<'a>(&self, string: &'a str) -> Result<Match<'a>, String> {
+    pub fn process<'a>(&self, string: &'a str) -> Result<Match<'a>, String> {
         let mut threads = vec![Thread::new()];
 
         for (i, char) in string.char_indices() {
@@ -341,7 +341,7 @@ impl<T> NFA<T> {
         }
     }
 
-    fn process_char(&self, threads: Vec<Thread>, char: char, pos: usize) -> Vec<Thread> {
+    pub fn process_char(&self, threads: Vec<Thread>, char: char, pos: usize) -> Vec<Thread> {
         let mut returned = Vec::with_capacity(threads.len());
 
         for mut thread in threads {
@@ -407,9 +407,9 @@ fn capture<T>(
 }
 
 #[derive(Debug)]
-struct Router<T> {
-    nfa: NFA<Metadata>,
-    handlers: BTreeMap<usize, T>,
+pub struct Router<T> {
+    pub nfa: NFA<Metadata>,
+    pub handlers: BTreeMap<usize, T>,
 }
 
 fn segments(route: &str) -> Vec<(Option<char>, &str)> {
@@ -441,14 +441,14 @@ fn first_byte(s: &str) -> u8 {
 }
 
 impl<T> Router<T> {
-    fn new() -> Router<T> {
+    pub fn new() -> Router<T> {
         Router {
             nfa: NFA::new(),
             handlers: BTreeMap::new(),
         }
     }
 
-    fn recognize(&self, mut path: &str) -> Result<RouterMatch<&T>, String> {
+    pub fn recognize(&self, mut path: &str) -> Result<RouterMatch<&T>, String> {
         if first_byte(path) == b'/' {
             path = &path[1..];
         }
@@ -473,7 +473,7 @@ impl<T> Router<T> {
         });
     }
 
-    fn add(&mut self, mut route: &str, destiny: T) {
+    pub fn add(&mut self, mut route: &str, destiny: T) {
         if route.is_empty() {
             return;
         }
