@@ -14,9 +14,23 @@ using the Non-deterministic Finite Automaton (NFA) concept. It allows you to def
 route matches a given URL path, making it ideal for web frameworks and other applications requiring fast and reliable
 routing.
 
-# Examples
+## How to install
 
-## Static Routes
+Run the following Cargo command in your project directory:
+
+```bash
+cargo add lightning-path
+```
+
+Or add the following line to your Cargo.toml:
+
+```toml
+lightning-path = "1.0.2"
+```
+
+## Examples
+
+### Static Routes
 
 ```rust
 use lightning_path::Router;
@@ -34,7 +48,7 @@ fn main() {
 }
 ```
 
-## Dynamic Routes
+### Dynamic Routes
 
 ```rust
 use lightning_path::Router;
@@ -52,7 +66,7 @@ fn main() {
 }
 ```
 
-## Wildcard Routes
+### Wildcard Routes
 
 ```rust
 use lightning_path::Router;
